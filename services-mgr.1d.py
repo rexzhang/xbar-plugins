@@ -20,7 +20,11 @@ from pathlib import Path
 
 SUDO_EXECUTABLE = "/usr/bin/sudo"
 CONFIG_FILE_NAME = "services-mgr.toml"
-CONFIG_FILE_PATHS = [Path(__file__).parent, Path("~"), Path("~/.config")]
+CONFIG_FILE_PATHS = [
+    Path(__file__).parent,
+    Path.home(),
+    Path.home().joinpath(".config"),
+]
 MENU_FORMAT_START_SERVICE = "-- Start | shell={} | terminal=False | refresh=True"
 MENU_FORMAT_STOP_SERVICE = "-- Stop | shell={} | terminal=False | refresh=True"
 
@@ -60,9 +64,12 @@ def load_config() -> list[Service]:
             pass
 
     if data is None:
-        raise Exception("Can't found config file")
+        print(f"Can't found configuration file <{CONFIG_FILE_NAME}>")
+        exit()
+
     if "services" not in data:
-        raise Exception(f"Incorrect format:{cf_filename}")
+        print(f"Configuration file format error <{cf_filename}>")
+        exit()
 
     services = list()
     for item in data["services"]:
@@ -112,16 +119,23 @@ def print_menu(services: list[Service]):
         else:
             print(f"{service.name}: {service.status.name}")
 
-        print(
-            MENU_FORMAT_START_SERVICE.format(
-                _convert_shell_call_to_menu_str(service.start_shell)
+        if service.status == ServiceStatus.ON:
+            print("-- Start")
+        else:
+            print(
+                MENU_FORMAT_START_SERVICE.format(
+                    _convert_shell_call_to_menu_str(service.start_shell)
+                )
             )
-        )
-        print(
-            MENU_FORMAT_STOP_SERVICE.format(
-                _convert_shell_call_to_menu_str(service.stop_shell)
+
+        if service.status == ServiceStatus.OFF:
+            print("-- Stop")
+        else:
+            print(
+                MENU_FORMAT_STOP_SERVICE.format(
+                    _convert_shell_call_to_menu_str(service.stop_shell)
+                )
             )
-        )
 
     print("---")
     print("Refresh | refresh=true")

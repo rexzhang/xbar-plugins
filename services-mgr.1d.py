@@ -8,12 +8,8 @@
 #  <xbar.desc>Configuration-driven service start/stop tool.</xbar.desc>
 #  <xbar.image>http://www.hosted-somewhere/pluginimage</xbar.image>
 #  <xbar.dependencies>python3.11+</xbar.dependencies>
-#  <xbar.abouturl>http://url-to-about.com/</xbar.abouturl>
+#  <xbar.abouturl>https://github.com/rexzhang/xbar-plugins</xbar.abouturl>
 
-# You will need to add the following line to your sudoers file. Remember to edit
-# sudoers with `sudo visudo`.
-#
-# %admin          ALL = NOPASSWD:/bin/launchctl
 
 import re
 import subprocess
@@ -24,6 +20,7 @@ from pathlib import Path
 
 SUDO_EXECUTABLE = "/usr/bin/sudo"
 CONFIG_FILE_NAME = "services-mgr.toml"
+CONFIG_FILE_PATHS = [Path(__file__).parent, Path("~"), Path("~/.config")]
 MENU_FORMAT_START_SERVICE = "-- Start | shell={} | terminal=False | refresh=True"
 MENU_FORMAT_STOP_SERVICE = "-- Stop | shell={} | terminal=False | refresh=True"
 
@@ -47,14 +44,26 @@ class Service:
 
 
 def load_config() -> list[Service]:
-    with open(Path(__file__).parent.joinpath(CONFIG_FILE_NAME), "rb") as f:
+    data = None
+    for cf_path in CONFIG_FILE_PATHS:
+        cf_filename = cf_path.joinpath(CONFIG_FILE_NAME)
         try:
-            data = tomllib.load(f)
-        except (FileNotFoundError, tomllib.TOMLDecodeError):
-            data = []
+            with open(cf_filename, "rb") as f:
+                try:
+                    data = tomllib.load(f)
+                except tomllib.TOMLDecodeError:
+                    data = []
 
+                break
+
+        except FileNotFoundError:
+            pass
+
+    if data is None:
+        raise Exception("Can't found config file")
     if "services" not in data:
-        raise Exception(f"Incorrect format:{CONFIG_FILE_NAME}")
+        raise Exception(f"Incorrect format:{cf_filename}")
+
     services = list()
     for item in data["services"]:
         # TODO: do something, check it...
@@ -70,10 +79,10 @@ def get_services_status(services: list[Service]) -> list[Service]:
     for index in range(len(services)):
         service = services[index]
         if len(service.status_shell) == 0 or len(service.status_on_regex) == 0:
-            return services
+            continue
 
-        result = subprocess.run(["zerotier-cli", "info"], capture_output=True)
-        m = re.match(service.status_on_regex, result.stdout.decode("utf-8"))
+        result = subprocess.run(service.status_shell, capture_output=True)
+        m = re.search(service.status_on_regex, result.stdout.decode("utf-8"))
         if m is None:
             services[index].status = ServiceStatus.OFF
         else:
